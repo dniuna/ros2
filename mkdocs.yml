@@ -61,6 +61,7 @@ copyright: OpenHUTB 版权所有 &copy; {year}
 
 nav:
 
+    - 无人机 AirSim 键盘遥控（ROS 2 Humble）: './air/uav_airsim_keyboard.md'
 - 入门:
     - 首页: 'index.md'
     - 安装 ROS: 'ubuntu20.04.md'
