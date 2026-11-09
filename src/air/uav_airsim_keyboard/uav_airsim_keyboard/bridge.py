@@ -123,6 +123,12 @@ class AirSimBridge(Node):
 
     def _control_cycle(self):
         now = time.monotonic()
+        # 没起飞、或已经降落时不下发任何位置指令：
+        # 否则落地后按一下方向键就会被拉回起飞前的设定点重新起飞。
+        if not self._flying:
+            self._setpoint = None
+            self._last_cycle = now
+            return
         with self._lock:
             fresh = (now - self._cmd_stamp) <= self._cmd_timeout
             vx, vy, vz_up, yaw_rate = self._cmd if fresh else (0.0, 0.0, 0.0, 0.0)
@@ -165,9 +171,11 @@ class AirSimBridge(Node):
                     sx, sy, sz, speed, vehicle_name=self._vehicle)
                 self._sent_point = self._setpoint
                 self._last_sent_at = now
-                if abs(yaw_rate) > 1e-3:
-                    self._client.rotateByYawRateAsync(
-                        yaw_rate, dt, vehicle_name=self._vehicle)
+            # 偏航独立于位置重发，否则设定点不动时只有 1/5 的占空比。
+            # ROS 的 angular.z 逆时针为正，AirSim 的 yaw 顺时针为正，取反。
+            if abs(yaw_rate) > 1e-3:
+                self._client.rotateByYawRateAsync(
+                    -yaw_rate, dt, vehicle_name=self._vehicle)
         except Exception as exc:  # noqa: BLE001 - 网络抖动不应杀死节点
             self._warn_throttled('速度指令下发失败: %s' % exc)
 
@@ -247,8 +255,15 @@ class AirSimBridge(Node):
         try:
             with self._lock:
                 if self._flying:
-                    self._client.landAsync(timeout_sec=10.0,
-                                           vehicle_name=self._vehicle).join()
+                    try:
+                        self._client.landAsync(timeout_sec=10.0,
+                                               vehicle_name=self._vehicle).join()
+                    except Exception as exc:  # noqa: BLE001
+                        # 落不下来就保留控制权，别在空中断桨
+                        self.get_logger().warning(
+                            f'降落失败（{exc}），保留 API 控制权')
+                        return
+                    self._flying = False
                 self._client.armDisarm(False, vehicle_name=self._vehicle)
                 self._client.enableApiControl(False, vehicle_name=self._vehicle)
         except Exception as exc:  # noqa: BLE001

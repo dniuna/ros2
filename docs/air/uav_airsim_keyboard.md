@@ -146,7 +146,7 @@ $$
 
 双击 `D:\airsim\Blocks\WindowsNoEditor\Blocks.exe`，等待场景加载完成，点击窗口使其获得焦点。第一次运行会提示是否允许网络访问，选"允许"。
 
-![AirSim Blocks 启动界面](../../img/uav_keyboard_blocks.png)
+![AirSim Blocks 启动界面](../img/uav_keyboard_blocks.png)
 
 **步骤 2：虚拟机确认网络**
 
@@ -162,7 +162,7 @@ colcon build --packages-select uav_airsim_keyboard --symlink-install
 source install/setup.bash
 ```
 
-![colcon build 成功](../../img/uav_keyboard_build.png)
+![colcon build 成功](../img/uav_keyboard_build.png)
 
 **步骤 4：启动**
 
@@ -172,7 +172,7 @@ ros2 run uav_airsim_keyboard main
 
 看到 `已连接 AirSim 10.0.2.2:41451` 后按 `t` 起飞，再用 `w/a/s/d/r/f/q/e` 飞行。
 
-![键盘遥控演示](../../img/uav_airsim_keyboard_demo.gif)
+![键盘遥控演示](../img/uav_airsim_keyboard_demo.gif)
 
 **步骤 5：验证话题**
 
