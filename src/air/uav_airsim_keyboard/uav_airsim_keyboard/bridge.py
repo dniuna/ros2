@@ -60,10 +60,11 @@ class AirSimBridge(Node):
                 '无法连接 AirSim（%s:%d）。请先在宿主机启动 Blocks.exe，'
                 '并确认虚拟机网络能访问该 IP。' % (self._ip, self._port))
 
+        # 只取控制权，不解锁：解锁会让电机上电，落地状态不该是这个状态。
+        # 真正的 armDisarm(True) 放在起飞服务里，和爬升动作一起发生。
         self._client.enableApiControl(True, vehicle_name=self._vehicle)
-        self._client.armDisarm(True, vehicle_name=self._vehicle)
         self.get_logger().info(
-            '已连接 AirSim %s:%d（vehicle_name=%r），API 控制已使能' %
+            '已连接 AirSim %s:%d（vehicle_name=%r），API 控制已使能（未解锁）' %
             (self._ip, self._port, self._vehicle))
 
         # ---- 收发接口 ----
@@ -165,17 +166,20 @@ class AirSimBridge(Node):
 
             moved = math.dist(self._setpoint,
                               getattr(self, '_sent_point', (1e9, 0, 0)))
-            if moved > 0.3 or (now - self._last_sent_at) > 0.5:
-                speed = max(0.8, math.sqrt(vx * vx + vy * vy + vz_ned * vz_ned))
-                self._client.moveToPositionAsync(
-                    sx, sy, sz, speed, vehicle_name=self._vehicle)
-                self._sent_point = self._setpoint
-                self._last_sent_at = now
-            # 偏航独立于位置重发，否则设定点不动时只有 1/5 的占空比。
-            # ROS 的 angular.z 逆时针为正，AirSim 的 yaw 顺时针为正，取反。
-            if abs(yaw_rate) > 1e-3:
-                self._client.rotateByYawRateAsync(
-                    -yaw_rate, dt, vehicle_name=self._vehicle)
+            # AirSim 的 Python 客户端不是线程安全的（msgpackrpc 单 IOLoop），
+            # 所有 RPC 都要在同一把锁里发，否则会和位姿读取、起飞流程撞车。
+            with self._lock:
+                if moved > 0.3 or (now - self._last_sent_at) > 0.5:
+                    speed = max(0.8, math.sqrt(vx * vx + vy * vy + vz_ned * vz_ned))
+                    self._client.moveToPositionAsync(
+                        sx, sy, sz, speed, vehicle_name=self._vehicle)
+                    self._sent_point = self._setpoint
+                    self._last_sent_at = now
+                # 偏航独立于位置重发，否则设定点不动时只有约 1/5 的占空比。
+                # ROS 的 angular.z 逆时针为正，AirSim 的 yaw 顺时针为正，取反。
+                if abs(yaw_rate) > 1e-3:
+                    self._client.rotateByYawRateAsync(
+                        -yaw_rate, dt, vehicle_name=self._vehicle)
         except Exception as exc:  # noqa: BLE001 - 网络抖动不应杀死节点
             self._warn_throttled('速度指令下发失败: %s' % exc)
 
